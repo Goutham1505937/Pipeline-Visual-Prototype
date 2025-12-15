@@ -1,0 +1,811 @@
+import React, { useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  Wand2,
+  Database,
+  CheckCircle2,
+  AlertTriangle,
+  ShieldCheck,
+  Workflow,
+  Code2,
+} from "lucide-react";
+
+/**
+ * Visual prototype only (no backend calls).
+ * This reuses the Farro pipeline visual pattern, adapted for:
+ * Natural Language → Design IR → Validation/HITL → PFD Rendering (React Flow)
+ */
+
+type StageId =
+  | "instruction"
+  | "perception"
+  | "assisted_structuring"
+  | "ir_enforcement"
+  | "validation"
+  | "pfd_render";
+
+type Stage = {
+  id: StageId;
+  title: string;
+  type: "Agentic" | "Deterministic";
+  icon: React.ReactNode;
+  summary: string;
+  whatHappens: string[];
+  references: Array<
+    | { kind: "tab"; label: string; tab: "prototype" | "ir" | "intent" | "components" | "layout" | "candidate" | "rules" }
+  >;
+};
+
+type StageOutput = {
+  kind: "json" | "text";
+  title: string;
+  value: string;
+};
+
+function pretty(obj: unknown) {
+  return JSON.stringify(obj, null, 2);
+}
+
+const sampleTeamsInstruction = `Create a 50 MLD RO-based water treatment flow with pretreatment, RO, permeate storage and reject handling.\n\nAdd chemical dosing before the filter.\nInclude reject recycle.`;
+
+export default function IonExchangePipelineVisual() {
+  const [activeTab, setActiveTab] = useState<
+    "prototype" | "ir" | "intent" | "components" | "layout" | "candidate" | "rules"
+  >("prototype");
+  const [showSourcePreview, setShowSourcePreview] = useState(true);
+
+  const stages: Stage[] = useMemo(
+    () => [
+      {
+        id: "instruction",
+        title: "Instruction Ingestion",
+        type: "Deterministic",
+        icon: <MessageSquare className="h-5 w-5" />,
+        summary: "Capture NL instructions from MS Teams and create a versioned design session.",
+        whatHappens: [
+          "Receive message from MS Teams",
+          "Create/resume design_session_id",
+          "Persist instruction (versioned)",
+          "Attach user/time metadata for audit",
+        ],
+        references: [
+          { kind: "tab", label: "Outputs", tab: "prototype" },
+        ],
+      },
+      {
+        id: "perception",
+        title: "Intent Perception",
+        type: "Agentic",
+        icon: <Wand2 className="h-5 w-5" />,
+        summary: "LLM-assisted understanding of user intent, entities, and high-level parameters.",
+        whatHappens: [
+          "Extract intent into a structured Intent Frame (not a diagram)",
+          "Identify plant type (RO – V1)",
+          "Extract capacity and key stages",
+          "Detect ambiguity/missing info",
+          "Emit confidence + notes",
+        ],
+        references: [
+          { kind: "tab", label: "Intent Schema", tab: "intent" },
+          { kind: "tab", label: "V1 Components", tab: "components" },
+          { kind: "tab", label: "Outputs", tab: "prototype" },
+        ],
+      },
+      {
+        id: "assisted_structuring",
+        title: "Assisted Structuring",
+        type: "Agentic",
+        icon: <Workflow className="h-5 w-5" />,
+        summary: "Propose candidate units and connections; preserve ambiguity (no silent assumptions).",
+        whatHappens: [
+          "Use Intent Frame + V1 component vocabulary",
+          "Propose candidate components from finite V1 set",
+          "Propose candidate sequencing as directed edges (connections)",
+          "Attach confidence per component",
+          "List ambiguities explicitly",
+        ],
+        references: [
+          { kind: "tab", label: "Candidate Schema", tab: "candidate" },
+          { kind: "tab", label: "V1 Components", tab: "components" },
+          { kind: "tab", label: "Outputs", tab: "prototype" },
+        ],
+      },
+      {
+        id: "ir_enforcement",
+        title: "Design IR (System of Record)",
+        type: "Deterministic",
+        icon: <Database className="h-5 w-5" />,
+        summary: "Canonicalize into strict Design IR; enforce schema and provenance.",
+        whatHappens: [
+          "Map candidates → canonical IR types",
+          "Enforce finite component set (V1)",
+          "Assign stable unit IDs",
+          "Attach provenance + version",
+        ],
+        references: [
+          { kind: "tab", label: "IR Schema", tab: "ir" },
+          { kind: "tab", label: "Outputs", tab: "prototype" },
+        ],
+      },
+      {
+        id: "validation",
+        title: "Validation & HITL Gate",
+        type: "Deterministic",
+        icon: <ShieldCheck className="h-5 w-5" />,
+        summary: "Apply sequencing/mandatory checks; route to Teams HITL on ambiguity or rule violations.",
+        whatHappens: [
+          "Run deterministic checks on Design IR",
+          "Evaluate confidence thresholds",
+          "If issues: route to MS Teams HITL",
+          "Otherwise: approve for rendering",
+        ],
+        references: [
+          { kind: "tab", label: "Rules", tab: "rules" },
+          { kind: "tab", label: "IR Schema", tab: "ir" },
+          { kind: "tab", label: "Outputs", tab: "prototype" },
+        ],
+      },
+      {
+        id: "pfd_render",
+        title: "PFD Rendering (React Flow)",
+        type: "Deterministic",
+        icon: <CheckCircle2 className="h-5 w-5" />,
+        summary: "Render validated IR as an editable conceptual PFD (single output in V1).",
+        whatHappens: [
+          "Map IR units → nodes",
+          "Map IR connections → edges",
+          "Apply deterministic layout policy (x/y)",
+          "Render editable PFD",
+          "Export SVG/PDF (optional)",
+        ],
+        references: [
+          { kind: "tab", label: "IR Schema", tab: "ir" },
+          { kind: "tab", label: "Layout Policy", tab: "layout" },
+          { kind: "tab", label: "Outputs", tab: "prototype" },
+        ],
+      },
+    ],
+    []
+  );
+
+  const [idx, setIdx] = useState(0);
+  const stage = stages[idx];
+
+  // --- Mock data (replace with real services later) ---
+  const instruction = useMemo(
+    () => ({
+      design_session_id: "wt_2025_12_14_0001",
+      instruction_version: 1,
+      source: "ms_teams",
+      received_at: "2025-12-14T09:18:00+08:00",
+      user: "engineer@ionexchange.com",
+      text: sampleTeamsInstruction,
+    }),
+    []
+  );
+
+  const perception = useMemo(
+    () => ({
+      design_session_id: instruction.design_session_id,
+      plant_type: "RO",
+      capacity_mld: 50,
+      requested_capabilities: ["pretreatment", "RO", "permeate_storage", "reject_handling", "reject_recycle"],
+      confidence: 0.92,
+      notes: [
+        "V1 constraint matched: RO flow",
+        "Detected instruction to add chemical dosing before filter",
+      ],
+      ambiguities: [
+        {
+          item: "pretreatment_detail",
+          reason: "Pretreatment specified broadly; assumes DMF within V1 component set",
+        },
+      ],
+    }),
+    [instruction.design_session_id]
+  );
+
+  const candidates = useMemo(
+    () => ({
+      design_session_id: instruction.design_session_id,
+      candidates: {
+        units: [
+          { type: "RAW_WATER_TANK", confidence: 0.95 },
+          { type: "CHEMICAL_DOSING", confidence: 0.90 },
+          { type: "DMF", confidence: 0.88 },
+          { type: "RO_UNIT", confidence: 0.93 },
+          { type: "PERMEATE_TANK", confidence: 0.86 },
+          { type: "REJECT_TANK", confidence: 0.84 },
+          { type: "REJECT_RECYCLE", confidence: 0.78 },
+        ],
+        connections: [
+          { from: "RAW_WATER_TANK", to: "CHEMICAL_DOSING" },
+          { from: "CHEMICAL_DOSING", to: "DMF" },
+          { from: "DMF", to: "RO_UNIT" },
+          { from: "RO_UNIT", to: "PERMEATE_TANK", stream: "PERMEATE" },
+          { from: "RO_UNIT", to: "REJECT_TANK", stream: "REJECT" },
+          { from: "REJECT_TANK", to: "REJECT_RECYCLE", stream: "RECYCLE" },
+          { from: "REJECT_RECYCLE", to: "RAW_WATER_TANK", stream: "RECYCLE" },
+        ],
+      },
+      ambiguities: perception.ambiguities,
+    }),
+    [instruction.design_session_id, perception.ambiguities]
+  );
+
+  const designIR = useMemo(
+    () => ({
+      ir_version: "water_treatment.ro.v1",
+      design_session_id: instruction.design_session_id,
+      scope: {
+        plant_type: "RO",
+        output: "CONCEPTUAL_PFD",
+        component_set: "RO_V1_FINITE",
+      },
+      units: [
+        { id: "U1", type: "RAW_WATER_TANK" },
+        { id: "U2", type: "CHEMICAL_DOSING" },
+        { id: "U3", type: "DMF" },
+        { id: "U4", type: "RO_UNIT" },
+        { id: "U5", type: "PERMEATE_TANK" },
+        { id: "U6", type: "REJECT_TANK" },
+        { id: "U7", type: "REJECT_RECYCLE" },
+      ],
+      connections: [
+        { from: "U1", to: "U2" },
+        { from: "U2", to: "U3" },
+        { from: "U3", to: "U4" },
+        { from: "U4", to: "U5", stream: "PERMEATE" },
+        { from: "U4", to: "U6", stream: "REJECT" },
+        { from: "U6", to: "U7", stream: "RECYCLE" },
+        { from: "U7", to: "U1", stream: "RECYCLE" },
+      ],
+      provenance: {
+        instruction_version: instruction.instruction_version,
+        llm_confidence: perception.confidence,
+      },
+    }),
+    [instruction.design_session_id, instruction.instruction_version, perception.confidence]
+  );
+
+  const validation = useMemo(
+    () => ({
+      design_session_id: instruction.design_session_id,
+      status: "WARN",
+      checks: [
+        { rule: "RO_REQUIRES_PRETREATMENT", result: "PASS" },
+        { rule: "DOSING_BEFORE_FILTRATION", result: "PASS" },
+        {
+          rule: "REJECT_RECYCLE_REQUIRES_EQUALIZATION",
+          result: "WARN",
+          note: "Equalization tank not in V1 finite component set; will allow but flag for review",
+        },
+      ],
+      confidence_gate: { threshold: 0.85, observed: perception.confidence, result: "PASS" },
+      hitl: {
+        required: true,
+        route: "MS_TEAMS",
+        question: "Reject recycle typically requires an equalization tank. Proceed without it for conceptual PFD?",
+      },
+    }),
+    [instruction.design_session_id, perception.confidence]
+  );
+
+  const reactFlowModel = useMemo(
+    () => ({
+      nodes: [
+        { id: "U1", type: "default", position: { x: 80, y: 120 }, data: { label: "Raw Water Tank" } },
+        { id: "U2", type: "default", position: { x: 280, y: 120 }, data: { label: "Chemical Dosing" } },
+        { id: "U3", type: "default", position: { x: 480, y: 120 }, data: { label: "DMF" } },
+        { id: "U4", type: "default", position: { x: 680, y: 120 }, data: { label: "RO Unit" } },
+        { id: "U5", type: "default", position: { x: 880, y: 60 }, data: { label: "Permeate Tank" } },
+        { id: "U6", type: "default", position: { x: 880, y: 180 }, data: { label: "Reject Tank" } },
+        { id: "U7", type: "default", position: { x: 680, y: 260 }, data: { label: "Reject Recycle" } },
+      ],
+      edges: [
+        { id: "e1", source: "U1", target: "U2" },
+        { id: "e2", source: "U2", target: "U3" },
+        { id: "e3", source: "U3", target: "U4" },
+        { id: "e4", source: "U4", target: "U5", label: "Permeate" },
+        { id: "e5", source: "U4", target: "U6", label: "Reject" },
+        { id: "e6", source: "U6", target: "U7", label: "Recycle" },
+        { id: "e7", source: "U7", target: "U1", label: "Recycle" },
+      ],
+      output: {
+        pfd: "Editable React Flow canvas",
+        export: ["SVG", "PDF"],
+      },
+    }),
+    []
+  );
+
+  const outputsByStage: Record<StageId, StageOutput[]> = useMemo(
+    () => ({
+      instruction: [
+        { kind: "text", title: "MS Teams Message", value: instruction.text },
+        { kind: "json", title: "Instruction Metadata", value: pretty(instruction) },
+      ],
+      perception: [
+        { kind: "json", title: "Perceived Intent", value: pretty(perception) },
+      ],
+      assisted_structuring: [
+        { kind: "json", title: "Candidate Units & Connections", value: pretty(candidates) },
+      ],
+      ir_enforcement: [
+        { kind: "json", title: "Canonical Design IR (System of Record)", value: pretty(designIR) },
+      ],
+      validation: [
+        { kind: "json", title: "Validation Result", value: pretty(validation) },
+      ],
+      pfd_render: [
+        { kind: "json", title: "React Flow Diagram Model", value: pretty(reactFlowModel) },
+      ],
+    }),
+    [instruction, perception, candidates, designIR, validation, reactFlowModel]
+  );
+
+  const statusBadge = useMemo(() => {
+    if (stage.id === "validation") {
+      const warn = validation.status !== "PASS";
+      return (
+        <Badge variant={warn ? "secondary" : "default"} className="gap-1">
+          {warn ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+          {validation.status}
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant={stage.type === "Agentic" ? "secondary" : "default"}>
+        {stage.type}
+      </Badge>
+    );
+  }, [stage, validation.status]);
+
+  return (
+    <div className="w-full p-4 md:p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-xl md:text-2xl font-semibold">NL → PFD Pipeline (Ion Exchange)</div>
+          <div className="text-sm text-muted-foreground">
+            Visual prototype of a governed pipeline: Natural Language → Design IR → Validation/HITL → PFD
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={showSourcePreview}
+              onCheckedChange={setShowSourcePreview}
+              id="showSource"
+            />
+            <Label htmlFor="showSource" className="text-sm">
+              Show Instruction
+            </Label>
+          </div>
+        </div>
+      </div>
+
+      <Card className="rounded-2xl shadow-sm">
+        <CardContent className="p-4 md:p-6">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center">
+                {stage.icon}
+              </div>
+              <div>
+                <div className="font-semibold">{stage.title}</div>
+                <div className="text-xs text-muted-foreground">{stage.summary}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {statusBadge}
+              <div className="text-xs text-muted-foreground">
+                Step {idx + 1} / {stages.length}
+              </div>
+            </div>
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="lg:col-span-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Pipeline</div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIdx((v) => Math.max(0, v - 1))}
+                    disabled={idx === 0}
+                    className="gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIdx((v) => Math.min(stages.length - 1, v + 1))}
+                    disabled={idx === stages.length - 1}
+                    className="gap-1"
+                  >
+                    Next <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {stages.map((s, i) => {
+                  const active = i === idx;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setIdx(i)}
+                      className={`w-full text-left rounded-xl border p-3 transition ${
+                        active ? "bg-muted/60 border-muted-foreground/20" : "hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                            {s.icon}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium leading-tight">{s.title}</div>
+                            <div className="text-xs text-muted-foreground">{s.type}</div>
+                          </div>
+                        </div>
+                        {s.id === "ir_enforcement" ? (
+                          <Badge variant="outline" className="gap-1">
+                            <Database className="h-3.5 w-3.5" /> IR
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {showSourcePreview ? (
+                <Card className="rounded-2xl">
+                  <CardContent className="p-3">
+                    <div className="text-xs font-medium mb-2 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" /> MS Teams Instruction
+                    </div>
+                    <div className="text-xs text-muted-foreground whitespace-pre-wrap">
+                      {instruction.text}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              <Card className="rounded-2xl">
+                <CardContent className="p-3">
+                  <div className="text-xs font-medium mb-2">What happens in this step</div>
+                  <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+                    {stage.whatHappens.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="text-[11px] text-muted-foreground">References:</div>
+                    {stage.references.map((r) => (
+                      <button
+                        key={`${stage.id}-${r.label}`}
+                        onClick={() => setActiveTab(r.tab)}
+                        className="text-left"
+                      >
+                        <Badge variant="outline" className="text-[11px]">
+                          {r.label}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="lg:col-span-8 space-y-3">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+                <TabsList className="grid grid-cols-7 gap-1">
+                  <TabsTrigger value="prototype" className="text-xs px-2 py-1">Out</TabsTrigger>
+                  <TabsTrigger value="ir" className="text-xs px-2 py-1">IR</TabsTrigger>
+                  <TabsTrigger value="intent" className="text-xs px-2 py-1">Intent</TabsTrigger>
+                  <TabsTrigger value="components" className="text-xs px-2 py-1">V1 Comp</TabsTrigger>
+                  <TabsTrigger value="layout" className="text-xs px-2 py-1">Layout</TabsTrigger>
+                  <TabsTrigger value="candidate" className="text-xs px-2 py-1">Cand</TabsTrigger>
+                  <TabsTrigger value="rules" className="text-xs px-2 py-1">Rules</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="prototype" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">Stage Outputs</div>
+                        <Badge variant="outline" className="gap-1">
+                          <Code2 className="h-3.5 w-3.5" /> Mock
+                        </Badge>
+                      </div>
+                      <Separator className="my-3" />
+                      <ScrollArea className="h-[420px] pr-2">
+                        <div className="space-y-4">
+                          {outputsByStage[stage.id].map((o) => (
+                            <div key={o.title} className="space-y-2">
+                              <div className="text-xs font-medium">{o.title}</div>
+                              <pre className="text-xs rounded-xl bg-muted p-3 overflow-auto whitespace-pre-wrap">
+                                {o.value}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                      {stage.id === "validation" ? (
+                        <div className="mt-3 rounded-xl border p-3">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="text-xs font-medium">HITL Preview (MS Teams)</div>
+                            <Badge variant="secondary" className="gap-1">
+                              <AlertTriangle className="h-3.5 w-3.5" /> HITL
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2">
+                            {validation.hitl.question}
+                          </div>
+                          <div className="flex items-center gap-2 mt-3">
+                            <Button size="sm" variant="outline">Approve</Button>
+                            <Button size="sm" variant="outline">Edit in UI</Button>
+                            <Button size="sm" variant="outline">Ask Clarification</Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="ir" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Database className="h-4 w-4" />
+                        <div className="text-sm font-medium">Design IR Schema (RO v1)</div>
+                      </div>
+                      <Separator className="my-3" />
+                      <pre className="text-xs rounded-xl bg-muted p-3 overflow-auto whitespace-pre-wrap">
+{`{
+  ir_version: "water_treatment.ro.v1",
+  design_session_id: string,
+  scope: {
+    plant_type: "RO",
+    output: "CONCEPTUAL_PFD",
+    component_set: "RO_V1_FINITE"
+  },
+  units: [ { id: string, type: string } ],
+  connections: [ { from: string, to: string, stream?: "PERMEATE" | "REJECT" | "RECYCLE" } ],
+  provenance: { instruction_version: number, llm_confidence: number }
+}`}
+                      </pre>
+                      <div className="text-xs text-muted-foreground mt-3">
+                        IR is authoritative. Validation and rendering operate on IR (not on free-form text).
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="intent" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Wand2 className="h-4 w-4" />
+                        <div className="text-sm font-medium">Intent Schema (Perception Output)</div>
+                      </div>
+                      <Separator className="my-3" />
+                      <pre className="text-xs rounded-xl bg-muted p-3 overflow-auto whitespace-pre-wrap">
+{`{
+  design_session_id,
+  plant_type: "RO",
+  capacity_mld?: number,
+  requested_capabilities: string[],
+  constraints?: { key: string; value: string | number }[],
+  ambiguities: [ { item, reason } ],
+  confidence: number,
+  notes?: string[]
+}`}
+                      </pre>
+                      <div className="text-xs text-muted-foreground mt-3">
+                        Intent Perception uses this schema as its extraction contract and outputs an instance of it for downstream structuring.
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="components" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Database className="h-4 w-4" />
+                        <div className="text-sm font-medium">V1 Component Vocabulary (with metadata)</div>
+                      </div>
+                      <Separator className="my-3" />
+                      <ScrollArea className="h-[420px] pr-2">
+                        <div className="space-y-3">
+                          {[
+                            {
+                              type: "RAW_WATER_TANK",
+                              label: "Raw Water Tank",
+                              description: "Source/holding tank feeding pretreatment.",
+                              typical_position: "Upstream",
+                              synonyms: ["raw water tank", "feed tank"],
+                            },
+                            {
+                              type: "CHEMICAL_DOSING",
+                              label: "Chemical Dosing",
+                              description: "Chemical addition (e.g., chlorination/coagulation/pH correction) before filtration.",
+                              typical_position: "Before filtration",
+                              synonyms: ["chlorination", "chemical injection", "dosing"],
+                            },
+                            {
+                              type: "DMF",
+                              label: "Dual Media Filter",
+                              description: "Pretreatment filtration unit to remove suspended solids before RO.",
+                              typical_position: "Before RO",
+                              synonyms: ["dual media filter", "sand filter", "pressure filter"],
+                            },
+                            {
+                              type: "RO_UNIT",
+                              label: "Reverse Osmosis Unit",
+                              description: "Core treatment unit producing permeate and reject streams.",
+                              typical_position: "Core",
+                              synonyms: ["RO", "reverse osmosis"],
+                            },
+                            {
+                              type: "PERMEATE_TANK",
+                              label: "Permeate Tank",
+                              description: "Storage/collection for RO permeate stream.",
+                              typical_position: "Downstream (permeate)",
+                              synonyms: ["permeate storage", "product tank"],
+                            },
+                            {
+                              type: "REJECT_TANK",
+                              label: "Reject Tank",
+                              description: "Collection/equalization for RO reject stream (conceptual in V1).",
+                              typical_position: "Downstream (reject)",
+                              synonyms: ["reject tank", "brine tank"],
+                            },
+                            {
+                              type: "REJECT_RECYCLE",
+                              label: "Reject Recycle",
+                              description: "Recycle loop returning reject (or a portion) upstream (conceptual in V1).",
+                              typical_position: "Reject loop",
+                              synonyms: ["reject recycle", "brine recycle"],
+                            },
+                          ].map((c) => (
+                            <div key={c.type} className="rounded-xl border p-3">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="text-xs font-medium">{c.label}</div>
+                                <Badge variant="outline" className="text-[11px]">{c.type}</Badge>
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-2">{c.description}</div>
+                              <div className="text-xs text-muted-foreground mt-2">
+                                <span className="font-medium text-foreground/80">Typical position:</span> {c.typical_position}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                <span className="font-medium text-foreground/80">Synonyms:</span> {c.synonyms.join(", ")}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                      <div className="text-xs text-muted-foreground mt-3">
+                        This vocabulary is used by Intent Perception and Assisted Structuring to stay within the finite V1 component set.
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="layout" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Workflow className="h-4 w-4" />
+                        <div className="text-sm font-medium">Deterministic Layout Policy (x/y)</div>
+                      </div>
+                      <Separator className="my-3" />
+                      <pre className="text-xs rounded-xl bg-muted p-3 overflow-auto whitespace-pre-wrap">
+{`{
+  layout_policy_id: "RO_V1_LTR_BRANCH",
+  intent: "Readable conceptual PFD (not to-scale)",
+  direction: "LEFT_TO_RIGHT",
+  spacing: { dx: 200, dy: 120 },
+  lanes: [
+    { name: "main", y: 120 },
+    { name: "permeate", y: 60 },
+    { name: "reject", y: 180 },
+    { name: "recycle", y: 260 }
+  ],
+  placement_rules: [
+    "Place upstream units in increasing x by dx",
+    "Branch PERMEATE to permeate lane",
+    "Branch REJECT to reject lane",
+    "Route RECYCLE through recycle lane back to upstream",
+    "Avoid overlaps; if overlap, increment y by dy"
+  ],
+  note: "Layout is presentation-only; Design IR remains tool-agnostic"
+}`}
+                      </pre>
+                      <div className="text-xs text-muted-foreground mt-3">
+                        Positions are computed deterministically from IR + this policy. They are not produced by the LLM.
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="candidate" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Wand2 className="h-4 w-4" />
+                        <div className="text-sm font-medium">Candidate Intent Schema (Agent Output)</div>
+                      </div>
+                      <Separator className="my-3" />
+                      <pre className="text-xs rounded-xl bg-muted p-3 overflow-auto whitespace-pre-wrap">
+{`{
+  candidates: {
+    units: [ { type, confidence } ],
+    // sequencing is expressed as a directed graph of proposed connections
+    connections: [ { from, to, stream? } ]
+  },
+  ambiguities: [ { item, reason } ]
+}`}
+                      </pre>
+                      <div className="text-xs text-muted-foreground mt-3">
+                        Sequencing is captured in candidates.connections (edges). These are proposals until canonicalized into Design IR.
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="rules" className="mt-3">
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4" />
+                        <div className="text-sm font-medium">Validation Rules (Illustrative)</div>
+                      </div>
+                      <Separator className="my-3" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {["RO_REQUIRES_PRETREATMENT", "DOSING_BEFORE_FILTRATION", "FINITE_COMPONENT_SET_V1", "CONFIDENCE_GATE", "NO_SILENT_ASSUMPTIONS"].map(
+                          (r) => (
+                            <div key={r} className="rounded-xl border p-3">
+                              <div className="text-xs font-medium">{r}</div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Deterministic rule applied to canonical Design IR.
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-3">
+                        V1 focuses on sequencing and mandatory checks (no sizing, no optimization).
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="text-xs text-muted-foreground">
+        Tip: Replace mock objects with real services; keep the probabilistic → deterministic boundary unchanged.
+      </div>
+    </div>
+  );
+}

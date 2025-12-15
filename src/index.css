@@ -1,0 +1,25 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #020617; /* slate-950-ish */
+  background-color: #f8fafc; /* slate-50-ish */
+}
+
+button {
+  font-family: inherit;
+}
+
+.text-muted-foreground {
+  color: #6b7280; /* slate-500 */
+}
+
+.bg-muted {
+  background-color: #f4f4f5; /* zinc-100 */
+}
